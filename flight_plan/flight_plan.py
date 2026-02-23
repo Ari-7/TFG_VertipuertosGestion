@@ -10,8 +10,8 @@ from matplotlib.collections import PathCollection
 from scipy.spatial.transform import Rotation
 
 
-from uspace.flight_plan.waypoint import Waypoint
-from uspace.flight_plan.command import Command
+from flight_plan.waypoint import Waypoint
+from flight_plan.command import Command
 
 
 matplotlib.use("Qt5Agg")
@@ -721,7 +721,7 @@ class FlightPlan:
         yPosTimePlot.set_ylim(yMidValue - addition, yMidValue + addition)
 
         # Show the plots
-        plt.show(block=False)
+        plt.show(block=True)
 
     def velocity_figure(self, figName, timeStep):
         # Display the flight plan instant velocity
