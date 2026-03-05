@@ -578,7 +578,8 @@ class FlightPlan:
         @cursor.connect("add")
         def on_add(sel):
             wp = waypoints[sel.index]
-            text = f"T: {wp.t}\n"
+            text = f"LABEL: {wp.label}\n"
+            text += f"T: {wp.t}\n"
             text += f"POS: {wp.pos}\n"
             text += f"VEL: {wp.vel}\n"
             text += f"ACEL: {wp.acel}"

@@ -13,6 +13,7 @@ from flight_plan.flight_plan import FlightPlan
 from flight_plan.waypoint import Waypoint
 from flight_plan.command import Command
 
+
 import numpy as np
 
 """
@@ -38,72 +39,135 @@ fp.print_waypoints()
 fp.position_figure("FP_1", 1)
 
 """
+import numpy as np
+from flight_plan.flight_plan import FlightPlan
+from flight_plan.waypoint import Waypoint
+
 class VertiportManager:
 
-    def __init__(self, pad_position):
-        self.pad_pos = np.array(pad_position)
-        self.altura_segura = 1.0 #poner valores que tengan sentido
-        self.vel_approach = 1.0 #esta es para ver a la velocidad a la que se acerca
-        self.vel_vertical = 1.0 #esta es para la velocidad que lleva al despegar y aterrizar verticalmente
+    def __init__(self, id="", name="", main_pad=None, pads=None, booking_buffer=40):
 
+        self.id = id
+        self.name = name
+
+        self.main_pad = main_pad
+        self.pads = pads or {}
+        self.booking_buffer = booking_buffer
+
+        self.D = 10.0               #D del UAV
+        self.h1 = 3.0               #Altura del hover bajo
+        self.h2 = 30.5              #Altura del hover alto - Límite OFV
+        self.slope_c = 0.125        #Pendiente de categoría C (12,5%)
+        self.v_vertical = 0.8       #Velocidad vertical (m/s)
+        self.v_rod = 0.5            #Velocidad de rodaje (m/s)
+        self.v_approach = 3.0       #Velocidad de aproximación/salida (m/s)
+
+        # Variables de tiempo y distancia para las maniobras
+        self.time_buffer_landing = 60.0  
+        self.time_to_rest = 5.0          
+        self.taxi_height = 0.2           
+        self.time_final_rest = 2.0       
+        self.default_booking_time = 3600 
+        self.departure_slope_dist = 100.0
 
     #Función para aterrizaje, se asume que se le pasa el estado del vertipuerto y el wp inicial (por el que termina su ruta)
-    def landing_fp(vertiport, initial_wp: Waypoint) -> FlightPlan:
+    def landing_fp(self, parking_id, initial_wp) -> 'FlightPlan':
 
+        parking_pad = self.pads.get(parking_id)
+        if not self.main_pad or not parking_pad:
+            raise ValueError("Pads no configurados")
+        
         #Ver si hay disponibilidad en alguno de los gate_pads en el momento en el que se necesite para el UAV y si el takeoff_pad está libre
-        if not vertiport.takeoff_pad_free(initial_wp.t) and vertiport.gate_available(initial_wp+50):
-            #cosas
-            pass
-    
+        main_loc = np.array(self.main_pad.location)
+        dist_total = np.linalg.norm(np.array(initial_wp.pos) - main_loc)
+        tiempo = (dist_total / self.v_approach) + (self.h2 / self.v_vertical) + self.time_buffer_landing
+
+        if not self.main_pad.is_available(initial_wp.t, initial_wp.t + tiempo, self.booking_buffer):
+            raise RuntimeError("TLOF ocupado") #hacer que se espere
+
         fp = FlightPlan()
 
-        fp.set_waypoint(initial_wp, label = "start") #quitar el label después de ver si funciona
+        #Punto de aproximación
+        fp.set_waypoint(initial_wp, label="start") #quitar el label después de ver si funciona
 
-        #Waypoints de por medio
+        #Entrada al OFV
+        t_h2 = initial_wp.t + (dist_total / self.v_approach)
+        pos_h2 = main_loc + [0, 0, self.h2]
+        fp.set_waypoint(label="OFV_h2", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, -self.v_vertical])
 
-        gate_pad_pos = vertiport.get_free_rest_pad() #función para que devuelva alguno de los gate_pads que está libre
+        #Landing en TLOF
+        t_land = t_h2 + (self.h2 / self.v_vertical)
+        fp.set_waypoint(label="TLOF_Land", time=t_land, pos=self.main_pad.location, vel=[0, 0, 0])
 
-        fp.set_waypoint(
-            label= "end",
-            time= initial_wp.t+50, #cambiar por algo con sentido
-            pos= gate_pad_pos,
-            vel= [0,0,0]
-        )
+        #Paso al pad de descanso
+        t_start_rest = t_land + self.time_to_rest
+        park_loc = np.array(parking_pad.location)
+        dist_rest = np.linalg.norm(park_loc[:2] - main_loc[:2])
+        t_end_rest = t_start_rest + (dist_rest / self.v_rod)
+        
+        pos_taxi = park_loc + [0, 0, self.taxi_height]
+        fp.set_waypoint(label="Taxi_to_Stand", time=t_end_rest, pos=pos_taxi.tolist(), vel=[0, 0, 0])
+
+        #Reposo en el pad de descanso
+        t_final = t_end_rest + self.time_final_rest
+        fp.set_waypoint(label="Final", time=t_final, pos=parking_pad.location, vel=[0, 0, 0])
+
+        # Realizar reservas
+        self.main_pad.book(initial_wp.t, t_start_rest, self.booking_buffer)
+        parking_pad.book(t_start_rest, t_final + self.default_booking_time, self.booking_buffer)
 
         fp.connect_waypoints()
-
+        
         return fp
 
+    #Función para despegue, desde el pad de descanso hasta la salida del vertipuerto
+    def takeoff_fp(self, parking_id, start_time, exit_heading) -> 'FlightPlan':
 
+        parking_pad = self.pads.get(parking_id)
+        if not self.main_pad or not parking_pad:
+            raise ValueError("Pads no configurados")
 
-    #Función para takeoff, se asume que se le pasa el estado del vertipuerto y el wp por el que va a iniciar su ruta
-    def takeoff_fp(vertiport, exit_wp: Waypoint, t0 = 0) -> FlightPlan:
-        
-        #Ver si hay disponibilidad en el takeoff_pad
-        if not vertiport.takeoff_pad_free(t0):  
-            #cosas
-            pass
+        # Validación del vector de salida
+        heading_norm = np.linalg.norm(exit_heading)
+        if heading_norm == 0:
+            raise ValueError("Vector de salida nulo")
 
         fp = FlightPlan()
+        main_loc = np.array(self.main_pad.location)
+        park_loc = np.array(parking_pad.location)
+
+        #Inicio en el pad de descanso
+        fp.set_waypoint(label="Stand_Start", time=start_time, pos=parking_pad.location, vel=[0, 0, 0])
+
+        #Movimiento al TLOF (rodaje)
+        dist_taxi = np.linalg.norm(main_loc[:2] - park_loc[:2])
+        t_at_tlof = start_time + (dist_taxi / self.v_rod) + self.time_to_rest
+        pos_tlof_taxi = main_loc + [0, 0, self.taxi_height]
+        fp.set_waypoint(label="Ready_at_TLOF", time=t_at_tlof, pos=pos_tlof_taxi.tolist(), vel=[0, 0, 0])
+
+        #Ascenso vertical OFV (h1 y h2)
+        t_h1 = t_at_tlof + (self.h1 / self.v_vertical)
+        pos_h1 = main_loc + [0, 0, self.h1]
+        fp.set_waypoint(label="OFV_h1", time=t_h1, pos=pos_h1.tolist(), vel=[0, 0, self.v_vertical])
+
+        t_h2 = t_h1 + ((self.h2 - self.h1) / self.v_vertical)
+        pos_h2 = main_loc + [0, 0, self.h2]
+        fp.set_waypoint(label="OFV_h2_Exit", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, self.v_vertical])
+
+        #Salida por la superficie de ascenso (pendiente categoría C)
+        unit_heading = np.array(exit_heading) / heading_norm
+        dist_slope = self.departure_slope_dist
         
-        pad_pos = np.array(vertiport.takeoff_pad)
+        z_final = self.h2 + (dist_slope * self.slope_c)
+        pos_final = pos_h2 + (unit_heading * dist_slope)
+        pos_final[2] = z_final
 
-        fp.set_waypoint(
-            label="start",
-            time=t0,
-            pos=pad_pos,
-            vel=[0,0,0]
-        )
+        t_final = t_h2 + (dist_slope / self.v_approach)
+        fp.set_waypoint(label="Departure_Slope", time=t_final, pos=pos_final.tolist(), vel=[0, 0, 0])
 
-        #Waypoints de por medio
-
-        fp.set_waypoint(
-            label="end",
-            time=t0+50, #cambiar por algo con sentido
-            pos= pad_pos,
-            vel= exit_wp.vel
-        )
+        # Realizar reserva del TLOF
+        self.main_pad.book(start_time, t_h2, self.booking_buffer)
 
         fp.connect_waypoints()
-
+        
         return fp
