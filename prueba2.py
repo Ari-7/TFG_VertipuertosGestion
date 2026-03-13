@@ -9,7 +9,7 @@ from src.gestion_v import VertiportManager
 def run_visual_tests():
 
     tlof_pad = Pad(id="TLOF_01", type="TLOF", status="FREE", operator_id="OP01", location=(0.0, 0.0, 0.0))
-    stand_pad = Pad(id="STAND_01", type="STAND", status="FREE", operator_id="OP01", location=(15, 15, 0.0))
+    stand_pad = Pad(id="STAND_01", type="STAND", status="FREE", operator_id="OP01", location=(50, 15, 0.0))
     
     v_manager = VertiportManager(
         id="VM_01", 

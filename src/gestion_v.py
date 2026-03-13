@@ -65,7 +65,7 @@ class VertiportManager:
         # Variables de tiempo y distancia para las maniobras
         self.time_buffer_landing = 60.0  
         self.time_to_rest = 5.0          
-        self.taxi_height = 0.2           
+        self.taxi_height = 1.5        
         self.time_final_rest = 2.0       
         self.default_booking_time = 3600 
         self.departure_slope_dist = 100.0
@@ -95,9 +95,9 @@ class VertiportManager:
         pos_h2 = main_loc + [0, 0, self.h2]
         fp.set_waypoint(label="OFV_h2", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, -self.v_vertical])
 
-        #Landing en TLOF
-        t_land = t_h2 + (self.h2 / self.v_vertical)
-        fp.set_waypoint(label="TLOF_Land", time=t_land, pos=self.main_pad.location, vel=[0, 0, 0])
+        #Hover en TLOF
+        t_land = t_h2 + ((self.h2 - self.h1) / self.v_vertical)
+        fp.set_waypoint(label="TLOF_Hover", time=t_land, pos=(main_loc + [0, 0, self.h1]).tolist(), vel=[0, 0, 0])
 
         #Paso al pad de descanso
         t_start_rest = t_land + self.time_to_rest
@@ -140,16 +140,18 @@ class VertiportManager:
         fp.set_waypoint(label="Stand_Start", time=start_time, pos=parking_pad.location, vel=[0, 0, 0])
 
         #Movimiento al TLOF (rodaje)
+        # El UAV se mueve horizontalmente desde el Stand hasta la vertical del TLOF a la altura de taxi
         dist_taxi = np.linalg.norm(main_loc[:2] - park_loc[:2])
         t_at_tlof = start_time + (dist_taxi / self.v_rod) + self.time_to_rest
         pos_tlof_taxi = main_loc + [0, 0, self.taxi_height]
         fp.set_waypoint(label="Ready_at_TLOF", time=t_at_tlof, pos=pos_tlof_taxi.tolist(), vel=[0, 0, 0])
 
         #Ascenso vertical OFV (h1 y h2)
-        t_h1 = t_at_tlof + (self.h1 / self.v_vertical)
+        t_h1 = t_at_tlof + ((self.h1 - self.taxi_height) / self.v_vertical)
         pos_h1 = main_loc + [0, 0, self.h1]
         fp.set_waypoint(label="OFV_h1", time=t_h1, pos=pos_h1.tolist(), vel=[0, 0, self.v_vertical])
 
+        # Continúa el ascenso vertical desde h1 hasta h2 (límite del OFV)
         t_h2 = t_h1 + ((self.h2 - self.h1) / self.v_vertical)
         pos_h2 = main_loc + [0, 0, self.h2]
         fp.set_waypoint(label="OFV_h2_Exit", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, self.v_vertical])
@@ -165,7 +167,7 @@ class VertiportManager:
         t_final = t_h2 + (dist_slope / self.v_approach)
         fp.set_waypoint(label="Departure_Slope", time=t_final, pos=pos_final.tolist(), vel=[0, 0, 0])
 
-        # Realizar reserva del TLOF
+        # Realizar reserva del TLOF (Se reserva desde que empieza el rodaje hasta que abandona el volumen h2)
         self.main_pad.book(start_time, t_h2, self.booking_buffer)
 
         fp.connect_waypoints()
