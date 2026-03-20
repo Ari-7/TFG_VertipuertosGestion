@@ -70,6 +70,62 @@ class VertiportManager:
         self.default_booking_time = 3600 
         self.departure_slope_dist = 100.0
 
+    def get_pad_menos(self, buffer, start_time, tiempo_rest):
+
+        elegible_pads = []
+        max_tiempo = 600
+        step = 30
+        best = None
+
+        for t in range(0, max_tiempo +1, step):
+
+            current_start = start_time + t
+            current_end = start_time + tiempo_rest
+        
+            for pad_id, pad in self.pads.items():
+
+                if pad.is_available(current_start, current_end, buffer):
+
+                    num_book = len(pad.get_bookings())
+
+                    if best is None or num_book < best[2]:
+                        best = (pad, current_start, num_book)
+
+                    elegible_pads.append((pad, len(pad.get_bookings())))
+
+            if best and best[2] == 0: 
+                break
+
+        return best
+
+    def get_pad_mas(self, buffer, start_time, tiempo_rest):
+
+        elegible_pads = []
+        max_tiempo = 600
+        step = 30
+        best = None
+
+        for t in range(0, max_tiempo +1, step):
+
+            current_start = start_time + t
+            current_end = start_time + tiempo_rest
+        
+            for pad_id, pad in self.pads.items():
+
+                if pad.is_available(current_start, current_end, buffer):
+
+                    num_book = len(pad.get_bookings())
+
+                    if best is None or num_book > best[2]:
+                        best = (pad, current_start, num_book)
+
+                    elegible_pads.append((pad, len(pad.get_bookings())))
+
+            if best: 
+                break
+
+        return best
+
     #Función para aterrizaje, se asume que se le pasa el estado del vertipuerto y el wp inicial (por el que termina su ruta)
     def landing_fp(self, parking_id, initial_wp) -> 'FlightPlan':
 
