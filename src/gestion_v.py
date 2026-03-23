@@ -127,21 +127,57 @@ class VertiportManager:
         return best
 
     #Función para aterrizaje, se asume que se le pasa el estado del vertipuerto y el wp inicial (por el que termina su ruta)
-    def landing_fp(self, parking_id, initial_wp) -> 'FlightPlan':
+    def landing_fp(self, initial_wp, strategy="least_used") -> 'FlightPlan':
 
-        parking_pad = self.pads.get(parking_id)
-        if not self.main_pad or not parking_pad:
+        if not self.main_pad or not self.pads:
             raise ValueError("Pads no configurados")
-        
-        #Ver si hay disponibilidad en alguno de los gate_pads en el momento en el que se necesite para el UAV y si el takeoff_pad está libre
+
         main_loc = np.array(self.main_pad.location)
         dist_total = np.linalg.norm(np.array(initial_wp.pos) - main_loc)
-        tiempo = (dist_total / self.v_approach) + (self.h2 / self.v_vertical) + self.time_buffer_landing
+        
+        # Tiempos estimados de maniobra
+        t_approach = dist_total / self.v_approach
+        t_descent = (self.h2 - self.h1) / self.v_vertical
+        t_arrival_at_tlof = t_approach + t_descent
+        
+        # Duración de la estancia en el Parking
+        parking_duration = self.default_booking_time
+        
+        #Búsqueda disponibilidad
+        t_attempt = initial_wp.t
+        parking_pad = None
+        found_slot = False
 
-        if not self.main_pad.is_available(initial_wp.t, initial_wp.t + tiempo, self.booking_buffer):
-            raise RuntimeError("TLOF ocupado") #hacer que se espere
+        while not found_slot and t_attempt < initial_wp.t + 7200:
+            # Se reserva desde que empieza la aproximación hasta que despeja hacia el parking
+            t_end_tlof = t_attempt + t_arrival_at_tlof + self.time_to_rest
+            
+            if self.main_pad.is_available(t_attempt, t_end_tlof, self.booking_buffer):
+                
+                if strategy == "least_used":
+                    parking_pad = self.get_best_pad_least_used_at_time(t_end_tlof, parking_duration, self.booking_buffer)
+                else:
+                    parking_pad = self.get_best_pad_consolidated_at_time(t_end_tlof, parking_duration, self.booking_buffer)
+                
+                if parking_pad:
+                    found_slot = True
+                    break
+            
+            t_attempt += 60.0
 
+        if not found_slot:
+            raise RuntimeError("No se encontró un slot libre (TLOF + Parking) en las próximas 2 horas")
+
+        # Una vez encontrado el hueco, realizamos las reservas reales
+        t_start_parking = t_attempt + t_arrival_at_tlof + self.time_to_rest
+        t_final_parking = t_start_parking + parking_duration
+        
+        self.main_pad.book(t_attempt, t_start_parking, self.booking_buffer, availability_checked=True)
+        parking_pad.book(t_start_parking, t_final_parking, self.booking_buffer, availability_checked=True)
+
+        # Procedemos a crear el FlightPlan con t_attempt (el tiempo de inicio real)
         fp = FlightPlan()
+        # ... resto de la lógica de waypoints ...
 
         #Punto de aproximación
         fp.set_waypoint(initial_wp, label="start") #quitar el label después de ver si funciona
