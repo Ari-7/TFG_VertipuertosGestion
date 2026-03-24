@@ -66,66 +66,49 @@ class VertiportManager:
         self.time_buffer_landing = 60.0  
         self.time_to_rest = 5.0          
         self.taxi_height = 1.5        
-        self.time_final_rest = 2.0       
-        self.default_booking_time = 3600 
+        self.time_final_rest = 2.0
         self.departure_slope_dist = 100.0
 
-    def get_pad(self, start_time, duration, buffer, strategy="least_used"):
-            
-            """
-            Busca el hueco más próximo en el tiempo. 
-            Si hay varios pads con el mismo tiempo de inicio mínimo, elige según la estrategia.
-            """
+    def get_pad_booking(self, start_time, duration, buffer):
+        
+            eligible = []
 
-            max_search = 7200  # 2 horas de margen
-            step = 60         # Resolución de búsqueda (1 minuto)
-            
-            for t_offset in range(0, max_search + 1, step):
-                t_current = start_time + t_offset
-                t_end = t_current + duration
-                
-                eligible = []
-                
-                for pad_id, pad in self.pads.items():
-                    if pad.is_available(t_current, t_end, buffer):
+            for pad_id, pad in self.pads.items():
 
-                        num_bookings = len(pad.get_bookings())
-                        eligible.append((pad, num_bookings))
-                
-                # Si hemos encontrado al menos un pad libre en este tiempo
-                if eligible:
-                    if strategy == "least_used":
-            
-                        eligible.sort(key=lambda x: x[1])
-                    else:
+                if pad.is_available(start_time, start_time + duration, buffer):
 
-                        eligible.sort(key=lambda x: x[1], reverse=True)
+                    num_bookings = len(pad.get_bookings())
+                    eligible.append((pad, num_bookings))
+                
+            # Si hemos encontrado al menos un pad libre en este tiempo
+            if eligible:
+
+                eligible.sort(key=lambda x: x[1], reverse=True)
                     
-                    best_pad, n_bookings = eligible[0]
-                    return best_pad, t_current, n_bookings
+                best_pad, n_bookings = eligible[0]
+                return best_pad, start_time, n_bookings
                     
             return None
 
+    def generate_fp(self, initial_wp, exit_heading, parking_duration = 1200) -> 'FlightPlan':
+
+        pass
     #Función para aterrizaje, se asume que se le pasa el estado del vertipuerto y el wp inicial (por el que termina su ruta)
-    def landing_fp(self, initial_wp, strategy="least_used") -> 'FlightPlan':
+    def landing_fp(self, initial_wp, parking_duration = 1200) -> 'FlightPlan':
 
         if not self.main_pad or not self.pads:
             raise ValueError("Pads no configurados")
         
-        parking_duration = self.default_booking_time
         buffer = self.booking_buffer
         
-        result = self.get_pad(initial_wp.t, parking_duration, buffer, strategy)
+        result = self.get_pad(initial_wp.t, parking_duration, buffer)
         
         if not result:
             raise RuntimeError("No hay disponibilidad en ningún pad")
             
         parking_pad, t_start_real, _ = result
-        
-        fp = FlightPlan()
 
-        #Punto de aproximación
-        fp.set_waypoint(label="start", time = t_start_real, pos = initial_wp.pos, vel = initial_wp.vel)
+ 
 
         main_loc = np.array(self.main_pad.location)
 
@@ -136,11 +119,9 @@ class VertiportManager:
         #Entrada al OFV
         t_h2 = initial_wp.t + (dist_total / self.v_approach)
         pos_h2 = main_loc + [0, 0, self.h2]
-        fp.set_waypoint(label="OFV_h2", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, -self.v_vertical])
 
         #Hover en TLOF
         t_land = t_h2 + ((self.h2 - self.h1) / self.v_vertical)
-        fp.set_waypoint(label="TLOF_Hover", time=t_land, pos=(main_loc + [0, 0, self.h1]).tolist(), vel=[0, 0, 0])
 
         #Paso al pad de descanso
         t_start_rest = t_land + self.time_to_rest
@@ -149,15 +130,27 @@ class VertiportManager:
         t_end_rest = t_start_rest + (dist_rest / self.v_rod)
         
         pos_taxi = park_loc + [0, 0, self.h1]
-        fp.set_waypoint(label="Taxi_to_Stand", time=t_end_rest, pos=pos_taxi.tolist(), vel=[0, 0, 0])
 
         #Reposo en el pad de descanso
         t_final = t_end_rest + self.time_final_rest
-        fp.set_waypoint(label="Final", time=t_final, pos=parking_pad.location, vel=[0, 0, 0])
 
-        # Realizar reservas
+         # Realizar reservas
         self.main_pad.book(initial_wp.t, t_start_rest, self.booking_buffer)
-        parking_pad.book(t_start_rest, t_final + self.default_booking_time, self.booking_buffer)
+        parking_pad.book(t_start_rest, t_final + parking_duration, self.booking_buffer)
+
+
+        fp = FlightPlan()
+
+        #Punto de aproximación
+        fp.set_waypoint(label="start", time = t_start_real, pos = initial_wp.pos, vel = initial_wp.vel)
+
+        fp.set_waypoint(label="OFV_h2", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, -self.v_vertical])
+
+        fp.set_waypoint(label="TLOF_Hover", time=t_land, pos=(main_loc + [0, 0, self.h1]).tolist(), vel=[0, 0, 0])
+
+        fp.set_waypoint(label="Taxi_to_Stand", time=t_end_rest, pos=pos_taxi.tolist(), vel=[0, 0, 0])
+
+        fp.set_waypoint(label="Final", time=t_final, pos=parking_pad.location, vel=[0, 0, 0])
 
         fp.connect_waypoints()
         
