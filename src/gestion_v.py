@@ -125,7 +125,7 @@ class VertiportManager:
         fp = FlightPlan()
 
         #Punto de aproximación
-        fp.set_waypoint(initial_wp, label="start")
+        fp.set_waypoint(label="start", time = t_start_real, pos = initial_wp.pos, vel = initial_wp.vel)
 
         main_loc = np.array(self.main_pad.location)
 
@@ -148,7 +148,7 @@ class VertiportManager:
         dist_rest = np.linalg.norm(park_loc[:2] - main_loc[:2])
         t_end_rest = t_start_rest + (dist_rest / self.v_rod)
         
-        pos_taxi = park_loc + [0, 0, self.taxi_height]
+        pos_taxi = park_loc + [0, 0, self.h1]
         fp.set_waypoint(label="Taxi_to_Stand", time=t_end_rest, pos=pos_taxi.tolist(), vel=[0, 0, 0])
 
         #Reposo en el pad de descanso
@@ -186,7 +186,7 @@ class VertiportManager:
         # El UAV se mueve horizontalmente desde el Stand hasta la vertical del TLOF a la altura de taxi
         dist_taxi = np.linalg.norm(main_loc[:2] - park_loc[:2])
         t_at_tlof = start_time + (dist_taxi / self.v_rod) + self.time_to_rest
-        pos_tlof_taxi = main_loc + [0, 0, self.taxi_height]
+        pos_tlof_taxi = park_loc + [0, 0, self.h1]
         fp.set_waypoint(label="Ready_at_TLOF", time=t_at_tlof, pos=pos_tlof_taxi.tolist(), vel=[0, 0, 0])
 
         #Ascenso vertical OFV (h1 y h2)

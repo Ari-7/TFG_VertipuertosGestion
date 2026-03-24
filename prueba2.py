@@ -26,7 +26,7 @@ def run_visual_tests():
         wp_start = Waypoint(label="Approach_Start", t=10.0, pos=[-70, 0.0, 70])
         
         # Generar plan
-        fp_landing = v_manager.landing_fp("STAND_01", wp_start)
+        fp_landing = v_manager.landing_fp( wp_start, strategy="last_used")
     
         fp_landing.print_waypoints()
         
