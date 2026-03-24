@@ -182,20 +182,19 @@ class VertiportManager:
         #Inicio en el pad de descanso
         fp.set_waypoint(label="Stand_Start", time=start_time, pos=parking_pad.location, vel=[0, 0, 0])
 
-        #Movimiento al TLOF (rodaje)
-        # El UAV se mueve horizontalmente desde el Stand hasta la vertical del TLOF a la altura de taxi
-        dist_taxi = np.linalg.norm(main_loc[:2] - park_loc[:2])
-        t_at_tlof = start_time + (dist_taxi / self.v_rod) + self.time_to_rest
-        pos_tlof_taxi = park_loc + [0, 0, self.h1]
-        fp.set_waypoint(label="Ready_at_TLOF", time=t_at_tlof, pos=pos_tlof_taxi.tolist(), vel=[0, 0, 0])
+        #El UAV se posiciona a la altura h1 para ir al TLOF
+        t_stand_h1 = start_time + (self.h1 / self.v_vertical)
+        pos_h1_stand = park_loc + [0, 0, self.h1]
+        fp.set_waypoint(label="Hover_at_h1", time=t_stand_h1, pos=pos_h1_stand.tolist(), vel=[0, 0, 0])
 
-        #Ascenso vertical OFV (h1 y h2)
-        t_h1 = t_at_tlof + ((self.h1 - self.taxi_height) / self.v_vertical)
-        pos_h1 = main_loc + [0, 0, self.h1]
-        fp.set_waypoint(label="OFV_h1", time=t_h1, pos=pos_h1.tolist(), vel=[0, 0, self.v_vertical])
+
+        dist_taxi = np.linalg.norm(main_loc[:2] - park_loc[:2])
+        t_at_tlof = t_stand_h1 + (dist_taxi / self.v_rod) + self.time_to_rest
+        pos_tlof_taxi = main_loc + [0, 0, self.h1]
+        fp.set_waypoint(label="TLOF_h1", time=t_at_tlof, pos=pos_tlof_taxi.tolist(), vel=[0, 0, 0])
 
         # Continúa el ascenso vertical desde h1 hasta h2 (límite del OFV)
-        t_h2 = t_h1 + ((self.h2 - self.h1) / self.v_vertical)
+        t_h2 = t_at_tlof + ((self.h2 - self.h1) / self.v_vertical)
         pos_h2 = main_loc + [0, 0, self.h2]
         fp.set_waypoint(label="OFV_h2_Exit", time=t_h2, pos=pos_h2.tolist(), vel=[0, 0, self.v_vertical])
 
@@ -208,10 +207,11 @@ class VertiportManager:
         pos_final[2] = z_final
 
         t_final = t_h2 + (dist_slope / self.v_approach)
+
         fp.set_waypoint(label="Departure_Slope", time=t_final, pos=pos_final.tolist(), vel=[0, 0, 0])
 
         # Realizar reserva del TLOF (Se reserva desde que empieza el rodaje hasta que abandona el volumen h2)
-        self.main_pad.book(start_time, t_h2, self.booking_buffer)
+        self.main_pad.book(t_stand_h1, t_h2, self.booking_buffer)
 
         fp.connect_waypoints()
         
