@@ -3,84 +3,67 @@ import matplotlib.pyplot as plt
 from flight_plan.flight_plan import FlightPlan
 from flight_plan.waypoint import Waypoint
 from vertiport.vertiport_pad import Pad
- 
 from src.gestion_v import VertiportManager
-def get_pad(self, start_time, duration, buffer, strategy="least_used"):
-        
-        """
-        Busca el hueco más próximo en el tiempo. 
-        Si hay varios pads con el mismo tiempo de inicio mínimo, elige según la estrategia.
-        """
 
-        max_search = 7200  # 2 horas de margen
-        step = 60         # Resolución de búsqueda (1 minuto)
-        
-        for t_offset in range(0, max_search + 1, step):
-            t_current = start_time + t_offset
-            t_end = t_current + duration
-            
-            eligible = []
-            
-            for pad_id, pad in self.pads.items():
-                if pad.is_available(t_current, t_end, buffer):
-
-                    num_bookings = len(pad.get_bookings())
-                    eligible.append((pad, num_bookings))
-            
-            # Si hemos encontrado al menos un pad libre en este tiempo
-            if eligible:
-                if strategy == "least_used":
-        
-                    eligible.sort(key=lambda x: x[1])
-                else:
-
-                    eligible.sort(key=lambda x: x[1], reverse=True)
-                
-                best_pad, n_bookings = eligible[0]
-                return best_pad, t_current, n_bookings
-                
-        return None
-
-manager = VertiportManager(id="V-ALB", name="Albacete Vertiport")
-manager.main_pad = Pad("TLOF", "landing", "active", "OP1", (0, 0, 0))
-
-
-p1 = Pad("STAND_1", "parking", "active", "OP1", (20, 0, 0))
-p2 = Pad("STAND_2", "parking", "active", "OP1", (0, 20, 0))
-p3 = Pad("STAND_3", "parking", "active", "OP1", (-20, 0, 0))
-
-# STAND_1: 
-p1.bookings.add((0, 1000)); p1.bookings.add((2000, 3000)); p1.bookings.add((4000, 5000))
-# STAND_2:
-p2.bookings.add((0, 1500))
-# STAND_3: 
-#p3.bookings.add((0, 1500))
-
-manager.pads = {"S1": p1, "S2": p2, "S3": p3}
-
-def run_test(strategy):
-    print(f"\n--- TEST: ESTRATEGIA {strategy.upper()} ---")
-    t_deseado = 6000
-    duracion = 3600
-    buffer = 40
+def run_tests():
+    # 1. configuracion del vertipuerto
+    tlof = Pad(id="TLOF_MAIN", type="landing", status="active", operator_id="OP1", location=[0, 0, 0])
     
-    if strategy == "least_used":
-        res = get_pad(manager, t_deseado, duracion, buffer, strategy)
-    else:
-        res =  get_pad(manager, t_deseado, duracion, buffer, strategy)
-        
-    if res:
-        pad, t_final, n = res
-        print(f"Resultado: Seleccionado {pad.id}")
-        print(f"Tiempo de inicio: {t_final} (Deseado: {t_deseado})")
-        print(f"Reservas previas en ese Pad: {n}")
-    else:
-        print("No se encontró pad disponible.")
+    # creamos 3 pads de descanso con distintos niveles de ocupacion previa
+    s1 = Pad(id="STAND_1", type="parking", status="active", operator_id="OP1", location=[20, 20, 0])
+    s2 = Pad(id="STAND_2", type="parking", status="active", operator_id="OP1", location=[-20, 20, 0])
+    s3 = Pad(id="STAND_3", type="parking", status="active", operator_id="OP1", location=[0, -20, 0])
 
-# Ejecución de las pruebas
-run_test("least_used")    
-run_test("most_used")  
+    # simulamos reservas previas para probar la estrategia consolidated (mas ocupado)
+    # s1 sera el mas ocupado, s2 medio, s3 vacio
+    for _ in range(5): s1.book(10000, 11000, 40) # reservas lejos del tiempo de prueba
+    for _ in range(2): s2.book(10000, 11000, 40)
+    
+    pads_dict = {"S1": s1, "S2": s2, "S3": s3}
+    manager = VertiportManager(id="V-ALB", name="Albacete", main_pad=tlof, pads=pads_dict)
 
-print("\n--- TEST EXTRA: STAND_3 ocupado en T=6000 ---")
-p3.bookings.add((5500, 7000)) 
-run_test("least_used") 
+    # 2. definir waypoint de entrada (uav aproximandose)
+    wp_entrada = Waypoint(label="start",t=100.0, pos=[100, 100, 50], vel=[-3, -3, 0])
+    heading_salida = [1, 0, 0] # salida hacia el este
+
+    print(f"\n=== Inicio de pruebas ===")
+
+    print("\ntest 1: condiciones ideales (esperado: exito en s1)")
+    try:
+        fp_exito = manager.generate_fp(wp_entrada, heading_salida, parking_duration=1200)
+        if fp_exito:
+            print(f"ok: plan generado. stand asignado: {fp_exito.waypoints[4].label}")
+            
+    except Exception as e:
+        print(f"fallo inesperado en test 1: {e}")
+
+    # tlof ocupado en landing
+    print("\ntest 2: tlof bloqueado al inicio (esperado: error tlof ocupado)")
+    manager.main_pad.book(100, 300, 40)
+    try:
+        manager.generate_fp(wp_entrada, heading_salida)
+    except RuntimeError as e:
+        print(f"capturado: {e}")
+
+    print("\ntest 3: stands bloqueados (esperado: error no hay disponibilidad)")
+    manager.main_pad.bookings.clear()
+    for p in manager.pads.values():
+        p.book(0, 5000, 40)
+    try:
+        manager.generate_fp(wp_entrada, heading_salida)
+    except RuntimeError as e:
+        print(f"capturado: {e}")
+
+    # stands libres, tlof libre al entrar, pero ocupado justo cuando quiere salir
+    print("\ntest 4: tlof bloqueado para salida (esperado: error tlof despegue)")
+    for p in manager.pads.values():
+        p.bookings.clear()
+
+    manager.main_pad.book(1300, 1600, 40) 
+    try:
+        manager.generate_fp(wp_entrada, heading_salida, parking_duration=1200)
+    except RuntimeError as e:
+        print(f"capturado: {e}\n")
+
+if __name__ == "__main__":
+    run_tests()
