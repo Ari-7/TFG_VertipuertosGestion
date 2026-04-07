@@ -167,7 +167,7 @@ class VertiportManager:
         # Paso al pad de descanso
         fp.set_waypoint(label="Taxi_to_Stand", time=t_end_taxi_land, pos=(park_loc + [0, 0, self.h1]).tolist(), vel=[0, 0, 0])
         # Reposo en el pad de descanso
-        fp.set_waypoint(label="Final_Land", time=t_final_land, pos=parking_pad.location, vel=[0, 0, 0])
+        fp.set_waypoint(label=parking_pad.id, time=t_final_land, pos=parking_pad.location, vel=[0, 0, 0])
 
         # Taxi y despegue #
 

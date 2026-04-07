@@ -43,7 +43,7 @@ def run_tests():
     try:
         manager.generate_fp(wp_entrada, heading_salida)
     except RuntimeError as e:
-        print(f"capturado: {e}")
+        print(f"{e}")
 
     print("\ntest 3: stands bloqueados (esperado: error no hay disponibilidad)")
     manager.main_pad.bookings.clear()
@@ -52,7 +52,7 @@ def run_tests():
     try:
         manager.generate_fp(wp_entrada, heading_salida)
     except RuntimeError as e:
-        print(f"capturado: {e}")
+        print(f"{e}")
 
     # stands libres, tlof libre al entrar, pero ocupado justo cuando quiere salir
     print("\ntest 4: tlof bloqueado para salida (esperado: error tlof despegue)")
@@ -63,7 +63,7 @@ def run_tests():
     try:
         manager.generate_fp(wp_entrada, heading_salida, parking_duration=1200)
     except RuntimeError as e:
-        print(f"capturado: {e}\n")
+        print(f"{e}\n")
 
 if __name__ == "__main__":
     run_tests()
