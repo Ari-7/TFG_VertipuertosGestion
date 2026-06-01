@@ -24,10 +24,10 @@ def run_visual_tests():
     try:
         
         wp_start = Waypoint(label="Approach_Start", t=10.0, pos=[-70, 0.0, 70])
-        exit_heading = [-1.0, 1.0, 0.0]
+        exit_wp =  Waypoint(label="Departure_Wp", t=1650.0, pos=[-30, 0.0, 70])
         
         # Generar plan
-        fp_landing = v_manager.generate_fp( wp_start, exit_heading=exit_heading)
+        fp_landing = v_manager.generate_fp( wp_start, exit_waypoint=exit_wp)
     
         fp_landing.print_waypoints()
         

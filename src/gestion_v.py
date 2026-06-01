@@ -1,5 +1,6 @@
 import sys
 from os import path
+import math
 
 current_file_path = path.dirname(__file__)
 project_root_path = path.abspath(path.join(current_file_path, ".."))
@@ -13,6 +14,10 @@ from flight_plan.flight_plan import FlightPlan
 from flight_plan.waypoint import Waypoint
 from flight_plan.command import Command
 
+
+import matplotlib.pyplot as plt
+import numpy as np
+import mplcursors
 
 import numpy as np
 
@@ -90,7 +95,7 @@ class VertiportManager:
                     
             return None
 
-    def generate_fp(self, initial_wp, exit_heading, parking_duration=1200) -> 'FlightPlan':
+    def generate_fp(self, initial_wp, exit_waypoint, parking_duration=1200) -> 'FlightPlan':
         """
         Genera un plan de vuelo completo unificado (Landing + Takeoff).
         Realiza las validaciones de disponibilidad para toda la misión antes de reservar.
@@ -105,8 +110,8 @@ class VertiportManager:
         dist_total_approach = np.linalg.norm(np.array(initial_wp.pos) - main_loc)
         
         # Tiempos de fase de aterrizaje
-        t_h2_land = initial_wp.t + (dist_total_approach / self.v_approach)
-        t_h1_land = t_h2_land + ((self.h2 - self.h1) / self.v_vertical)
+        t_h2_land = math.ceil((initial_wp.t + (dist_total_approach / self.v_approach))/10)*10
+        t_h1_land = math.ceil((t_h2_land + ((self.h2 - self.h1) / self.v_vertical))/10)*10
         t_start_taxi_land = t_h1_land + self.time_to_rest
         
         ### Disponibilidad TLOF ###
@@ -128,15 +133,15 @@ class VertiportManager:
         parking_pad, _, _ = result
         park_loc = np.array(parking_pad.location)
         dist_taxi = np.linalg.norm(park_loc[:2] - main_loc[:2])
-        t_end_taxi_land = t_start_taxi_land + (dist_taxi / self.v_rod)
+        t_end_taxi_land = math.ceil((t_start_taxi_land + (dist_taxi / self.v_rod))/10)*10
         t_final_land = t_end_taxi_land + self.time_final_rest
 
         ### Tiempos takeoff ###
 
         t_start_takeoff = t_end_stay # El despegue inicia tras la estancia
-        t_stand_h1_takeoff = t_start_takeoff + (self.h1 / self.v_vertical)
-        t_at_tlof_takeoff = t_stand_h1_takeoff + (dist_taxi / self.v_rod) + self.time_to_rest
-        t_h2_takeoff = t_at_tlof_takeoff + ((self.h2 - self.h1) / self.v_vertical)
+        t_stand_h1_takeoff = math.ceil((t_start_takeoff + (self.h1 / self.v_vertical))/10)*10
+        t_at_tlof_takeoff =  math.ceil((t_stand_h1_takeoff + (dist_taxi / self.v_rod) + self.time_to_rest)/10)*10
+        t_h2_takeoff =  math.ceil((t_at_tlof_takeoff + ((self.h2 - self.h1) / self.v_vertical))/10)*10
 
         ### Disponibilidad TLOF takeoff ###
 
@@ -161,7 +166,7 @@ class VertiportManager:
         # Punto de aproximación
         fp.set_waypoint(label="start", time=initial_wp.t, pos=initial_wp.pos, vel=initial_wp.vel)
         # Entrada al OFV
-        fp.set_waypoint(label="OFV_h2", time=t_h2_land, pos=(main_loc + [0, 0, self.h2]).tolist(), vel=[0, 0, -self.v_vertical])
+        fp.set_waypoint(label="OFV_h2", time= t_h2_land, pos=(main_loc + [0, 0, self.h2]).tolist(), vel=[0, 0, -self.v_vertical])
         # Hover en TLOF
         fp.set_waypoint(label="TLOF_Hover", time=t_h1_land, pos=(main_loc + [0, 0, self.h1]).tolist(), vel=[0, 0, 0])
         # Paso al pad de descanso
@@ -182,7 +187,7 @@ class VertiportManager:
 
         # Ascenso vertical desde h1 hasta h2 (límite del OFV)
         fp.set_waypoint(label="OFV_h2_Exit", time=t_h2_takeoff, pos=(main_loc + [0, 0, self.h2]).tolist(), vel=[0, 0, self.v_vertical])
-
+        """
         # Salida final
         heading_norm = np.linalg.norm(exit_heading)
         unit_heading = np.array(exit_heading) / heading_norm
@@ -190,9 +195,13 @@ class VertiportManager:
         z_final = self.h2 + (dist_slope * self.slope_c)
         pos_final = (np.array(main_loc + [0, 0, self.h2]) + (unit_heading * dist_slope))
         pos_final[2] = z_final
-        t_final = t_h2_takeoff + (dist_slope / self.v_approach)
+        t_final = math.ceil((t_h2_takeoff + (dist_slope / self.v_approach))/10)*10
 
         fp.set_waypoint(label="Departure_Slope", time=t_final, pos=pos_final.tolist(), vel=[0, 0, 0])
+        """
+
+        fp.set_waypoint(label="Departure_Wp", time=exit_waypoint.t, pos=exit_waypoint.pos, vel=exit_waypoint.vel)
 
         fp.connect_waypoints()
         return fp
+    
