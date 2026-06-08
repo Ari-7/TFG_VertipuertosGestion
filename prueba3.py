@@ -24,7 +24,7 @@ def run_tests():
 
     # 2. definir waypoint de entrada (uav aproximandose)
     wp_entrada = Waypoint(label="start",t=100.0, pos=[100, 100, 50], vel=[-3, -3, 0])
-    heading_salida = [1, 0, 0] # salida hacia el este
+    heading_salida = Waypoint(label="start",t=100.0, pos=[200, 100, 50], vel=[-3, -3, 0])
 
     print(f"\n=== Inicio de pruebas ===")
 
