@@ -7,7 +7,7 @@ from vertiport.vertiport_pad import Pad
  
 from src.gestion_v import VertiportManager
 
-def estudio_productividad(num_solicitudes=30, intervalo_llegada=180):
+def estudio_productividad(num_solicitudes=20, intervalo_llegada=180):
     
     print("\n" + "="*70)
     print(f"{'ANÁLISIS DE CAPACIDAD OPERATIVA':^70}")
@@ -69,4 +69,4 @@ def estudio_productividad(num_solicitudes=30, intervalo_llegada=180):
     print("="*70)
 
 if __name__ == "__main__":
-    estudio_productividad(num_solicitudes=30, intervalo_llegada=250)
+    estudio_productividad(num_solicitudes=70, intervalo_llegada=250)
