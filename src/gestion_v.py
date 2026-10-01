@@ -96,6 +96,7 @@ class VertiportManager:
             return None
 
     def generate_fp(self, initial_wp, exit_waypoint, parking_duration=1200) -> 'FlightPlan':
+        
         """
         Genera un plan de vuelo completo unificado (Landing + Takeoff).
         Realiza las validaciones de disponibilidad para toda la misión antes de reservar.
